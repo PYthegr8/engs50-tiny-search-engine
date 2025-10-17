@@ -4,7 +4,7 @@ OFILES=queue.o hash.o webpage.o
 
 
 all: $(OFILES)
-ar cr ~/engs50/tse/lib/libutils.a $(OFILES)
+	ar cr ~/engs50/tse/lib/libutils.a $(OFILES)
 
 hash: queue.o hash.o 
 	$(CC) $(CFLAGS) $^ -o $@

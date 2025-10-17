@@ -1,0 +1,20 @@
+CC = gcc
+CFLAGS=-Wall -pedantic -std=c11 -I. -g
+
+all: test_list queue hash
+
+hash: queue.o hash.o 
+	$(CC) $(CFLAGS) $^ -o $@
+
+queue:  queue.o
+	$(CC) $(CFLAGS) $^ -o $@
+
+
+test_list: test_list.o list.o
+	$(CC) $(CFLAGS) $^ -o $@
+
+%.o: %.c %.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+clean:
+	rm -f *.o test_list queue hash

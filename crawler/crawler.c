@@ -20,6 +20,7 @@ void print_q_contents(void* elementp);
 void free_page(void* elementp);
 bool key_exist(hashtable_t *htp, void* keyp);
 bool equals(void* elementp, const void* keyp);
+int32_t pagesave(webpage_t *pagep, int id, char *dirname);
 
 int main(){
     // Module 4 Step 2
@@ -86,8 +87,10 @@ int main(){
             printf("This is the current URL we are getting: %s\n", result);
             if (IsInternalURL(result) && !key_exist(lookup, result)) {
                 webpage_t* new_page = webpage_new(result, 0, NULL);
-                if (hput(lookup, (void*)new_page, result, sizeof(result))) {
+                if (hput(lookup, (void*)new_page, result, strlen(result) + 1)) {
                     fprintf(stderr, "[Error: Could not insert the URL into the queue]\n"); 
+                    free(result);
+                    free(new_page);
                     return EXIT_FAILURE;
                 }
             }
@@ -98,6 +101,14 @@ int main(){
     webpage_delete(page_step4);
     happly(lookup, free_page);
     hclose(lookup);
+
+    // Module 4 step 5
+    printf("Saving webpage contents to a file");
+    webpage_t* page_step5 = webpage_new("https://thayer.github.io/engs50/", 0, NULL);
+    if(webpage_fetch(page_step5)) {
+        pagesave(page_step5, 1, "../pages");
+    }
+    webpage_delete(page_step5);
 }
 
 
@@ -112,7 +123,8 @@ void free_page(void* elementp) {
 }
 
 bool key_exist(hashtable_t *htp, void* keyp) {
-    if ((hsearch(htp, equals, keyp, sizeof(keyp))) == NULL) {
+    size_t keylen = strlen((const char *)keyp) + 1;
+    if((hsearch(htp, equals, keyp, keylen)) == NULL) {
         return false; 
     }
     return true;
@@ -131,5 +143,26 @@ bool equals(void* elementp, const void* keyp) {
     }
 
     return false;
+}
+
+int32_t pagesave(webpage_t *pagep, int id, char *dirname) {
+    char filepath[256];
+    sprintf(filepath, "%s/%d", dirname, id);
+
+    FILE *file = fopen(filepath, "w");
+    if (file == NULL) {
+        fprintf(stderr, "[Error: Could not open file %s]\n", filepath);
+        return EXIT_FAILURE;
+    }
+
+    fprintf(file, "%s\n", webpage_getURL(pagep));
+    fprintf(file, "%d\n", webpage_getDepth(pagep));
+    fprintf(file, "%d\n", webpage_getHTMLlen(pagep));
+
+    // optionally write the HTML content
+    fprintf(file, "%s", webpage_getHTML(pagep));
+
+    fclose(file);
+    return EXIT_SUCCESS;
 }
 

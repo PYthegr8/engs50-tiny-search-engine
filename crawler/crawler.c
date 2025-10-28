@@ -89,8 +89,8 @@ int main(int argc, char *argv[]){
         int pos = 0;
         char *result;
         while ((pos = webpage_getNextURL(page_step4, pos, &result)) > 0) {
-            printf("This is the current URL we are getting: %s\n", result);
             if (IsInternalURL(result) && !key_exist(lookup, result)) {
+                printf("This is the current URL we are getting: %s\n", result);
                 webpage_t* new_page = webpage_new(result, 0, NULL);
                 if (hput(lookup, (void*)new_page, result, strlen(result) + 1)) {
                     fprintf(stderr, "[Error: Could not insert the URL into the queue]\n"); 

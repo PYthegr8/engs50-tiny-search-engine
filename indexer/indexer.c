@@ -5,7 +5,7 @@
  * Created: 10-28-2025
  * Version: 1.0
  * 
- * Description: prints Hello on screen
+ * Description: indexer implementation for tiny search engine
  * 
  */
 
@@ -21,39 +21,58 @@
 
 
 
-//char *NormalizeWord(const char *input);
+char *NormalizeWord(char *input);
 
 int main() {
     webpage_t* loaded_page = pageload(1, "../crawler");
+    FILE *file = fopen("./indexer_output", "w");
     if (loaded_page) {
         int pos = 0;
         char *result;
         while ((pos = webpage_getNextWord(loaded_page, pos, &result)) > 0) {
-            printf("word : %s\n", result);
+        char *normalized_word = NormalizeWord(result);
+            if (normalized_word) {
+                fprintf(file, "%s\n", normalized_word);
+                free(normalized_word);
+            }
             free(result);
         }
+        fclose(file);
+        webpage_delete(loaded_page);
     }
     else {
 			printf("failed to load page \n");
     }
-    webpage_delete(loaded_page);
-		return 0;
+	return 0;
 }
 
-//char *NormalizeWord(char *input){
-//         if (strlen(input) < 3) {
-//            printf("word less than 3 characters \n");
-//            return EXIT_FAILURE;
-//         }
-//
-//         int i = 0;
-//         char* str = (char*)malloc(strlen(input) + 1);
-//         strcpy(str,input);
-//         while (input[i] != '\0') {
-//             if (isalnum(input[i])) {
-//                str[i] = tolower(input[i]);
-//             }
-//             i++;
-//         }
-//         return str;
-//}
+char *NormalizeWord(char *input){
+     int len = strlen(input);
+     if (len < 3) {
+        printf("word less than 3 characters \n");
+        return NULL;
+     }
+
+     char *newWord = malloc(len + 1);
+
+     if (newWord == NULL) {
+        return NULL;
+     }
+
+     int i = 0;
+     int j = 0;
+     while (input[i] != '\0') {
+         unsigned char c = (unsigned char)input[i];
+         if (isalnum(c)) {
+             newWord[j++] = (char)tolower(c);
+         }
+         i++;
+     }
+     newWord[j] = '\0';
+
+     if (j < 3) {
+         free(newWord);
+         return NULL;
+     }
+     return newWord;
+}

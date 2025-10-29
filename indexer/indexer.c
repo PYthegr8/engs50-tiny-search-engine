@@ -17,12 +17,14 @@
  #include <unistd.h>
  #include <ctype.h>
  #include "webpage.h"
+ #include "pageio.h"
+
 
 
 //char *NormalizeWord(const char *input);
 
 int main() {
-    webpage_t* loaded_page = pageload(1, ".");
+    webpage_t* loaded_page = pageload(1, "../crawler");
     if (loaded_page) {
         int pos = 0;
         char *result;
@@ -32,9 +34,10 @@ int main() {
         }
     }
     else {
-        printf("failed to load page \n")
+			printf("failed to load page \n");
     }
-    webpage_delete(page);
+    webpage_delete(loaded_page);
+		return 0;
 }
 
 //char *NormalizeWord(char *input){

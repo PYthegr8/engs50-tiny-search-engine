@@ -36,7 +36,6 @@ int main() {
     FILE *file = fopen("./indexer_output", "w");
     hashtable_t *hmap = hopen(10000);
     if (loaded_page) {
-			  FILE *file = fopen("./indexer_output", "w"); 
         int pos = 0;
         char *result;
         while ((pos = webpage_getNextWord(loaded_page, pos, &result)) > 0) {

@@ -11,8 +11,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "pageio.h"
+#include <stdbool.h>
 #include "webpage.h"
+#include "pageio.h"
 
 
 int32_t pagesave(webpage_t *pagep, int id, char *dirnm);
@@ -58,6 +59,10 @@ webpage_t *pageload(int id, char *dirnm) {
         printf("First Line: %s\n", url);
     }
 
+    if (strlen(url) > 0 && url[strlen(url) - 1] == '\n') {
+        url[strlen(url) - 1] = '\0';
+    }
+
     int depth;
 
     if ((depth = fgetc(file)) == EOF) {
@@ -83,5 +88,5 @@ webpage_t *pageload(int id, char *dirnm) {
 int main() {
     webpage_t *page;
     page = pageload(1, ".");
-    pagesave(page, 1, ".");
+    pagesave(page, 2, ".");
 }

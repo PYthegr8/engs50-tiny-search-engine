@@ -12,7 +12,6 @@
  #include <stdio.h>
  #include <stdlib.h>
  #include <string.h>
- #include <stdbool.h>
  #include "queue.h"
  #include "hash.h"
  #include <unistd.h>
@@ -20,119 +19,141 @@
  #include "webpage.h"
  #include "pageio.h"
 
-typedef struct wordcount {
-    char *word;
-    int frequency;
-} wordcount_t;
+typedef struct wordcount {                                                                                                              
+    char *word;                                                                                                                         
+    int  frequency;                                                                                                                     
+} wordcount_t;  
 
-bool NormalizeWord(char *newWord, char *input);
-bool key_exist(hashtable_t *htp, void* keyp);
-bool equals(void* elementp, const void* keyp);
-wordcount_t *wordcount_init(char *word, int frequency);
-void put_to_file(void* elementp);
 
-int main() {
+static char *dupstr(const char *s);
+char *NormalizeWord(char *input);
+static bool equals(void *elementp, const void *keyp);
+static wordcount_t *wordcount_init(const char *word);
+static void print_wordcount(void *elementp);
+
+static int total_words = 0;
+static void sum_frequencies(void *elementp);
+
+static void free_wordcount(void *elementp);
+
+
+
+int main(void) {
     webpage_t* loaded_page = pageload(1, "../crawler");
+    if (!loaded_page) {
+        printf("failed to load page \n");
+        return 1;
+    }
+
     FILE *file = fopen("./indexer_output", "w");
+    if (!file) { perror("fopen indexer_output"); webpage_delete(loaded_page); return 1; }
+
     hashtable_t *hmap = hopen(10000);
-    if (loaded_page) {
-        int pos = 0;
-        char *result;
-        while ((pos = webpage_getNextWord(loaded_page, pos, &result)) > 0) {
-            int len = strlen(result);
-            char *wordToBeNormalized = (char*)malloc(sizeof(char) * len + 1);
-            bool success = NormalizeWord(wordToBeNormalized, result);
-                if (success) {
-                    fprintf(file, "%s\n", wordToBeNormalized);
-                    if (!key_exist(hmap, wordToBeNormalized)) {
-                        wordcount_t *wc = wordcount_init(wordToBeNormalized, 1);
-                        hput(hmap, (void*)wc, wordToBeNormalized, len);
-                    }
-                    else {
-                        printf("Here\n");
-                        wordcount_t *wc = (wordcount_t *)hsearch(hmap, equals, wordToBeNormalized, len);
-                        wc->frequency++;
-                    }
-                }
-                free(result);
-                free(wordToBeNormalized);
+    if (!hmap) { fprintf(stderr, "hopen failed\n"); fclose(file); webpage_delete(loaded_page); return 1; }
+
+    int pos = 0;
+    char *result = NULL;
+
+    while ((pos = webpage_getNextWord(loaded_page, pos, &result)) > 0) {
+        char *normalized = NormalizeWord(result);
+        if (normalized) {
+            /* write occurrence list */
+            fprintf(file, "%s\n", normalized);
+
+            /* update hashtable index: word -> frequency */
+            size_t keylen = strlen(normalized) + 1;
+            wordcount_t *wc = (wordcount_t *)hsearch(hmap, equals, normalized, keylen);
+            if (!wc) {
+                wc = wordcount_init(normalized);
+                if (wc) hput(hmap, wc, wc->word, keylen);
+            } else {
+                wc->frequency++;
             }
-        happly(hmap, put_to_file);
-        hclose(hmap);
-        fclose(file);
-        webpage_delete(loaded_page);
+            free(normalized);  // safe because table stores its own strdup
+        }
+        free(result);          // always free result from webpage_getNextWord
     }
-    else {
-			printf("failed to load page \n");
-    }
-	return 0;
+
+    fclose(file);
+
+    /* print full index (word frequency) */
+    happly(hmap, print_wordcount);
+
+    /* sum frequencies and print total */
+    total_words = 0;
+    happly(hmap, sum_frequencies);
+    printf("TOTAL %d\n", total_words);
+
+    /* cleanup */
+    happly(hmap, free_wordcount);
+    hclose(hmap);
+    webpage_delete(loaded_page);
+    return 0;
 }
 
-bool NormalizeWord(char *newWord, char *input){
+char *NormalizeWord(char *input){
      int len = strlen(input);
      if (len < 3) {
-        return false;
+        return NULL;
      }
 
-     int i = 0;
-     while (input[i] != '\0') {
-         unsigned char c = (unsigned char)input[i];
-         if (!isalnum(c)) {
-             return false;
-         }
-         newWord[i++] = (char)tolower(c);
-     }
-     newWord[i] = '\0';
+     char *newWord = malloc(len + 1);
 
-     if (i < 3) {
+     if (newWord == NULL) {
+        return NULL;
+     }
+
+     for (int i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)input[i];
+        if (!isalpha(c)) {           // <-- reject whole word if any non-letter
+            free(newWord);
+            return NULL;
+        }
+        newWord[i] = (char)tolower(c);
+     }
+		 
+		 newWord[len] = '\0';
+		 
+     if (len < 3) {
          free(newWord);
-         return false;
+         return NULL;
      }
-     return true;
+     return newWord;
 }
 
-bool key_exist(hashtable_t *htp, void* keyp) {
-    size_t keylen = strlen((const char *)keyp) + 1;
-    if((hsearch(htp, equals, keyp, keylen)) == NULL) {
-        return false;
-    }
-    return true;
+static bool equals(void *elementp, const void *keyp) {
+    const wordcount_t *wc = (const wordcount_t *)elementp;
+    return strcmp(wc->word, (const char *)keyp) == 0;
 }
 
-bool equals(void* elementp, const void* keyp) {
-    const char *compare_word = (const char *)elementp;
-    const char *hmap_key = (const char *)keyp;
-    printf("Compare word: %s, key word: %s\n", compare_word, hmap_key);
-    if (!strcmp(compare_word, hmap_key)) {
-        return true;
-    }
-    return false;
-}
-
-wordcount_t *wordcount_init(char *word, int frequency) {
+static wordcount_t *wordcount_init(const char *word) {
     wordcount_t *wc = malloc(sizeof(wordcount_t));
-    if (!wc) {
-        fprintf(stderr, "[Error: Malloc failed allocating wordcount struct]\n");
-        return NULL;
-    }
-
-    wc->word = malloc(strlen(word) + 1);  
-    if (!wc->word) {
-        fprintf(stderr, "[Error: Malloc failed allocating word string]\n");
-        free(wc);
-        return NULL;
-    }
-
-    strcpy(wc->word, word);
-    wc->frequency = frequency;
+    if (!wc) return NULL;
+    wc->word = dupstr(word);              // take our own copy
+    if (!wc->word) { free(wc); return NULL; }
+    wc->frequency = 1;
     return wc;
 }
 
-
-void put_to_file(void* elementp) {
+static void print_wordcount(void *elementp) {
     wordcount_t *wc = (wordcount_t *)elementp;
-    printf("Elements are: %s, %d\n", (char *)wc->word, wc->frequency);
-    FILE *file = fopen("./indexer_output_hmap", "a");
-    fprintf(file, "%s\n", (char *)wc->word);
-    fclose(file);
+    printf("%s %d\n", wc->word, wc->frequency);
+}
+
+               // summed after build
+static void sum_frequencies(void *elementp) {
+    wordcount_t *wc = (wordcount_t *)elementp;
+    total_words += wc->frequency;
+}
+
+static void free_wordcount(void *elementp) {
+    wordcount_t *wc = (wordcount_t *)elementp;
+    free(wc->word);
+    free(wc);
+}
+
+static char *dupstr(const char *s) {
+    char *copy = malloc(strlen(s) + 1);
+    if (copy) strcpy(copy, s);
+    return copy;
 }

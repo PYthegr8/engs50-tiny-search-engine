@@ -55,10 +55,8 @@ int main(void) {
     while ((pos = webpage_getNextWord(loaded_page, pos, &result)) > 0) {
         char *normalized = NormalizeWord(result);
         if (normalized) {
-            /* write occurrence list */
             fprintf(file, "%s\n", normalized);
 
-            /* update hashtable index: word -> frequency */
             size_t keylen = strlen(normalized) + 1;
             wordcount_t *wc = (wordcount_t *)hsearch(hmap, equals, normalized, keylen);
             if (!wc) {
@@ -67,23 +65,20 @@ int main(void) {
             } else {
                 wc->frequency++;
             }
-            free(normalized);  // safe because table stores its own strdup
+            free(normalized);  
         }
-        free(result);          // always free result from webpage_getNextWord
+        free(result);          
     }
 
     fclose(file);
 
-    /* print full index (word frequency) */
     happly(hmap, print_wordcount);
     happly(hmap, put_to_file);
 
-    /* sum frequencies and print total */
     total_words = 0;
     happly(hmap, sum_frequencies);
     printf("TOTAL %d\n", total_words);
 
-    /* cleanup */
     happly(hmap, free_wordcount);
     hclose(hmap);
     webpage_delete(loaded_page);
@@ -104,7 +99,7 @@ char *NormalizeWord(char *input){
 
      for (int i = 0; i < len; i++) {
         unsigned char c = (unsigned char)input[i];
-        if (!isalpha(c)) {           // <-- reject whole word if any non-letter
+        if (!isalpha(c)) {           
             free(newWord);
             return NULL;
         }
@@ -158,7 +153,6 @@ static void free_wordcount(void *elementp) {
 
 void put_to_file(void* elementp) {
     wordcount_t *wc = (wordcount_t *)elementp;
-    printf("Elements are: %s, %d\n", (char *)wc->word, wc->frequency);
     FILE *file = fopen("./indexer_output_hmap", "a");
     fprintf(file, "%s: %d\n", (char *)wc->word, wc->frequency);
     fclose(file);

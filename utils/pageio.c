@@ -83,10 +83,4 @@ webpage_t *pageload(int id, char *dirnm) {
 
     fclose(file);
     return new_webpage;
-} 
-
-int main() {
-    webpage_t *page;
-    page = pageload(1, ".");
-    pagesave(page, 2, ".");
 }

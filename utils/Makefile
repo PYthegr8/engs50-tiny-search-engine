@@ -16,4 +16,4 @@ queue:  queue.o
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f *.o  queue hash ~/engs50/tse/lib/libutils.a
+	rm -f *.o  queue hash  webpage.o pageio.o ~/engs50/tse/lib/libutils.a

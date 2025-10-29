@@ -9,16 +9,20 @@
  * 
  */
 
-
  #include <stdio.h>
  #include <stdlib.h>
  #include <string.h>
- #include <inttypes.h>
+ #include "queue.h"
+ #include "hash.h"
  #include <unistd.h>
- #include <webpage.h>
+ #include <ctype.h>
+ #include "webpage.h"
+
+
+//char *NormalizeWord(const char *input);
 
 int main() {
-    webpage_t* loaded_page = pageload(1, char *dirnm);
+    webpage_t* loaded_page = pageload(1, ".");
     if (loaded_page) {
         int pos = 0;
         char *result;
@@ -27,23 +31,26 @@ int main() {
             free(result);
         }
     }
-
-
-    char *NormalizeWord(char *input){
-         if (strlen(input) < 3) {
-            printf("word less than 3 characters \n");
-            return EXIT_FAILURE;
-         }
-
-         int i = 0;
-         char* str = (char*)malloc(strlen(input) + 1);
-         strcpy(str,input);
-         while (input[i] != '\0') {
-             if (isalnum(input[i])) {
-                str[i] = tolower(input[i]);
-             }
-             i++;
-         }
-         return str;
+    else {
+        printf("failed to load page \n")
     }
+    webpage_delete(page);
 }
+
+//char *NormalizeWord(char *input){
+//         if (strlen(input) < 3) {
+//            printf("word less than 3 characters \n");
+//            return EXIT_FAILURE;
+//         }
+//
+//         int i = 0;
+//         char* str = (char*)malloc(strlen(input) + 1);
+//         strcpy(str,input);
+//         while (input[i] != '\0') {
+//             if (isalnum(input[i])) {
+//                str[i] = tolower(input[i]);
+//             }
+//             i++;
+//         }
+//         return str;
+//}

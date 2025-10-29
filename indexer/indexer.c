@@ -25,15 +25,13 @@ typedef struct wordcount {
 } wordcount_t;  
 
 
-static char *dupstr(const char *s);
 char *NormalizeWord(char *input);
 static bool equals(void *elementp, const void *keyp);
-static wordcount_t *wordcount_init(const char *word);
+static wordcount_t *wordcount_init(const char *word, int frequency);
 static void print_wordcount(void *elementp);
-
+void put_to_file(void* elementp);
 static int total_words = 0;
 static void sum_frequencies(void *elementp);
-
 static void free_wordcount(void *elementp);
 
 
@@ -64,7 +62,7 @@ int main(void) {
             size_t keylen = strlen(normalized) + 1;
             wordcount_t *wc = (wordcount_t *)hsearch(hmap, equals, normalized, keylen);
             if (!wc) {
-                wc = wordcount_init(normalized);
+                wc = wordcount_init(normalized, 1);
                 if (wc) hput(hmap, wc, wc->word, keylen);
             } else {
                 wc->frequency++;
@@ -78,6 +76,7 @@ int main(void) {
 
     /* print full index (word frequency) */
     happly(hmap, print_wordcount);
+    happly(hmap, put_to_file);
 
     /* sum frequencies and print total */
     total_words = 0;
@@ -126,12 +125,18 @@ static bool equals(void *elementp, const void *keyp) {
     return strcmp(wc->word, (const char *)keyp) == 0;
 }
 
-static wordcount_t *wordcount_init(const char *word) {
+static wordcount_t *wordcount_init(const char *word, int frequency) {
     wordcount_t *wc = malloc(sizeof(wordcount_t));
     if (!wc) return NULL;
-    wc->word = dupstr(word);              // take our own copy
-    if (!wc->word) { free(wc); return NULL; }
-    wc->frequency = 1;
+    wc->word = malloc(strlen(word) + 1);
+    if (!wc->word) {
+        fprintf(stderr, "[Error: Malloc failed allocating word string]\n");
+        free(wc);
+        return NULL;
+    }
+
+    strcpy(wc->word, word);
+    wc->frequency = frequency;
     return wc;
 }
 
@@ -140,7 +145,6 @@ static void print_wordcount(void *elementp) {
     printf("%s %d\n", wc->word, wc->frequency);
 }
 
-               // summed after build
 static void sum_frequencies(void *elementp) {
     wordcount_t *wc = (wordcount_t *)elementp;
     total_words += wc->frequency;
@@ -152,8 +156,10 @@ static void free_wordcount(void *elementp) {
     free(wc);
 }
 
-static char *dupstr(const char *s) {
-    char *copy = malloc(strlen(s) + 1);
-    if (copy) strcpy(copy, s);
-    return copy;
+void put_to_file(void* elementp) {
+    wordcount_t *wc = (wordcount_t *)elementp;
+    printf("Elements are: %s, %d\n", (char *)wc->word, wc->frequency);
+    FILE *file = fopen("./indexer_output_hmap", "a");
+    fprintf(file, "%s: %d\n", (char *)wc->word, wc->frequency);
+    fclose(file);
 }

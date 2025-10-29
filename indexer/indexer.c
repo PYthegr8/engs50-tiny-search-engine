@@ -49,6 +49,7 @@ int main() {
                         hput(hmap, (void*)wc, wordToBeNormalized, len);
                     }
                     else {
+                        printf("Here\n");
                         wordcount_t *wc = (wordcount_t *)hsearch(hmap, equals, wordToBeNormalized, len);
                         wc->frequency++;
                     }
@@ -70,7 +71,6 @@ int main() {
 bool NormalizeWord(char *newWord, char *input){
      int len = strlen(input);
      if (len < 3) {
-        printf("word less than 3 characters \n");
         return false;
      }
 
@@ -102,6 +102,7 @@ bool key_exist(hashtable_t *htp, void* keyp) {
 bool equals(void* elementp, const void* keyp) {
     const char *compare_word = (const char *)elementp;
     const char *hmap_key = (const char *)keyp;
+    printf("Compare word: %s, key word: %s\n", compare_word, hmap_key);
     if (!strcmp(compare_word, hmap_key)) {
         return true;
     }
@@ -109,18 +110,28 @@ bool equals(void* elementp, const void* keyp) {
 }
 
 wordcount_t *wordcount_init(char *word, int frequency) {
-    wordcount_t *wc = malloc(sizeof(wordcount_t));    
+    wordcount_t *wc = malloc(sizeof(wordcount_t));
     if (!wc) {
         fprintf(stderr, "[Error: Malloc failed allocating wordcount struct]\n");
         return NULL;
     }
-    wc->word = word;
+
+    wc->word = malloc(strlen(word) + 1);  
+    if (!wc->word) {
+        fprintf(stderr, "[Error: Malloc failed allocating word string]\n");
+        free(wc);
+        return NULL;
+    }
+
+    strcpy(wc->word, word);
     wc->frequency = frequency;
     return wc;
-}   
+}
+
 
 void put_to_file(void* elementp) {
     wordcount_t *wc = (wordcount_t *)elementp;
+    printf("Elements are: %s, %d\n", (char *)wc->word, wc->frequency);
     FILE *file = fopen("./indexer_output_hmap", "a");
     fprintf(file, "%s\n", (char *)wc->word);
     fclose(file);

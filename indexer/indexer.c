@@ -25,8 +25,8 @@ char *NormalizeWord(char *input);
 
 int main() {
     webpage_t* loaded_page = pageload(1, "../crawler");
-    FILE *file = fopen("./indexer_output", "w");
     if (loaded_page) {
+			  FILE *file = fopen("./indexer_output", "w"); 
         int pos = 0;
         char *result;
         while ((pos = webpage_getNextWord(loaded_page, pos, &result)) > 0) {
@@ -49,7 +49,6 @@ int main() {
 char *NormalizeWord(char *input){
      int len = strlen(input);
      if (len < 3) {
-        printf("word less than 3 characters \n");
         return NULL;
      }
 
@@ -59,18 +58,18 @@ char *NormalizeWord(char *input){
         return NULL;
      }
 
-     int i = 0;
-     int j = 0;
-     while (input[i] != '\0') {
-         unsigned char c = (unsigned char)input[i];
-         if (isalnum(c)) {
-             newWord[j++] = (char)tolower(c);
-         }
-         i++;
+     for (int i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)input[i];
+        if (!isalpha(c)) {           // <-- reject whole word if any non-letter
+            free(newWord);
+            return NULL;
+        }
+        newWord[i] = (char)tolower(c);
      }
-     newWord[j] = '\0';
-
-     if (j < 3) {
+		 
+		 newWord[len] = '\0';
+		 
+     if (len < 3) {
          free(newWord);
          return NULL;
      }

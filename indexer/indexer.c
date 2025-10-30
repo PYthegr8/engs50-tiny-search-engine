@@ -75,15 +75,22 @@ static void print_wordentry_pretty(void *elementp);
 
 static int g_first;
 
-int main(void) {
-    const int docID = 1;
+int main(int argc, char *argv[]) {
+    // ---- read docID from command line ----
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <id>\n", argv[0]);
+        return 1;
+    }
+    int docID = atoi(argv[1]);   // convert argument string to integer
 
+    // ---- load the webpage ----
     webpage_t *page = pageload(docID, "../crawler");
     if (!page) {
-        fprintf(stderr, "failed to load page\n");
+        fprintf(stderr, "failed to load page %d\n", docID);
         return 1;
     }
 
+    // ---- create hashtable for index ----
     hashtable_t *ht = hopen(2048);
     if (!ht) {
         fprintf(stderr, "hopen failed\n");
@@ -91,7 +98,7 @@ int main(void) {
         return 1;
     }
 
-    // ---- build index ----
+    // ---- build index for this page ----
     int pos = 0;
     char *raw = NULL;
     while ((pos = webpage_getNextWord(page, pos, &raw)) > 0) {
@@ -103,11 +110,11 @@ int main(void) {
         free(raw);
     }
 
-    // ---- print index contents ----
+    // ---- print results ----
     printf("\n=== Inverted Index for Document %d ===\n", docID);
     happly(ht, print_wordentry_pretty);
 
-    // ---- test sumwords_doc() ----
+    // ---- verify total word count ----
     int total = sumwords_doc(ht, docID);
     printf("\nTOTAL word occurrences in doc%d: %d\n", docID, total);
 
@@ -116,7 +123,6 @@ int main(void) {
     webpage_delete(page);
     return 0;
 }
-
 
 char *NormalizeWord(char *input){
      int len = strlen(input);

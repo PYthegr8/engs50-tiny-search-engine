@@ -19,4 +19,4 @@
 
 
 int32_t index_save(hashtable_t *ht, char *indexnm);
-//hashtable_t *index_load(char *indexnm);
+hashtable_t *index_load(char *indexnm);

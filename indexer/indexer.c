@@ -272,9 +272,10 @@ static int index_update_doc(hashtable_t *ht, const char *norm_word, int docID) {
 
 static void dump_wordentry(void *elementp) {
     wordentry_t *we = (wordentry_t *)elementp;
-    g_current_word = we->word;        // set global so dump_posting can use it
-    qapply(we->plist, dump_posting);  // apply dump_posting to each posting
-    g_current_word = NULL;            // clear afterward (not strictly needed)
+    if (!g_out_multi) return;
+    fprintf(g_out_multi, "%s", we->word);
+    qapply(we->plist, dump_posting);
+    fprintf(g_out_multi, "\n");
 }
 
 int index_dump_multi(hashtable_t *ht, FILE *out) {
@@ -327,7 +328,7 @@ static void print_wordentry_pretty(void *elementp) {
 
 static void dump_posting(void *pp) {
     posting_t *p = (posting_t *)pp;
-    fprintf(g_out_multi, "%s %d %d\n", g_current_word, p->docID, p->count);
+    fprintf(g_out_multi, " %d %d", p->docID, p->count);
 }
 
 static void add_post(void *pp) {

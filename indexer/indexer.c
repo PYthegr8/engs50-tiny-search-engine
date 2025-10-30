@@ -81,46 +81,50 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Usage: %s <id>\n", argv[0]);
         return 1;
     }
-    int docID = atoi(argv[1]);   // convert argument string to integer
-
-    // ---- load the webpage ----
-    webpage_t *page = pageload(docID, "../crawler");
-    if (!page) {
-        fprintf(stderr, "failed to load page %d\n", docID);
-        return 1;
-    }
-
-    // ---- create hashtable for index ----
+    int threshhold = atoi(argv[1]) + 1;
+    int total_squared = 0;
     hashtable_t *ht = hopen(2048);
-    if (!ht) {
-        fprintf(stderr, "hopen failed\n");
-        webpage_delete(page);
-        return 1;
-    }
-
-    // ---- build index for this page ----
-    int pos = 0;
-    char *raw = NULL;
-    while ((pos = webpage_getNextWord(page, pos, &raw)) > 0) {
-        char *norm = NormalizeWord(raw);
-        if (norm) {
-            index_update_doc(ht, norm, docID);
-            free(norm);
+    for(int docID = 1; docID < threshhold; docID++) {
+        // ---- load the webpage ----
+        webpage_t *page = pageload(docID, "../crawler");
+        if (!page) {
+            fprintf(stderr, "failed to load page %d\n", docID);
+            return 1;
         }
-        free(raw);
-    }
 
-    // ---- print results ----
-    printf("\n=== Inverted Index for Document %d ===\n", docID);
-    happly(ht, print_wordentry_pretty);
+        // ---- create hashtable for index ----
+        if (!ht) {
+            fprintf(stderr, "hopen failed\n");
+            webpage_delete(page);
+            return 1;
+        }
 
-    // ---- verify total word count ----
-    int total = sumwords_doc(ht, docID);
-    printf("\nTOTAL word occurrences in doc%d: %d\n", docID, total);
+        // ---- build index for this page ----
+        int pos = 0;
+        char *raw = NULL;
+        while ((pos = webpage_getNextWord(page, pos, &raw)) > 0) {
+            char *norm = NormalizeWord(raw);
+            if (norm) {
+                index_update_doc(ht, norm, docID);
+                free(norm);
+            }
+            free(raw);
+        }
 
-    // ---- cleanup ----
+        // ---- print results ----
+        printf("\n=== Inverted Index for Document %d ===\n", docID);
+        happly(ht, print_wordentry_pretty);
+
+        // ---- verify total word count ----
+        int total = sumwords_doc(ht, docID);
+        total_squared += total;
+        printf("\nTOTAL word occurrences in doc%d: %d\n", docID, total);
+
+        // ---- cleanup ----
+        webpage_delete(page);
+    } 
     index_destroy_multi(ht);
-    webpage_delete(page);
+    printf("Total total word count is: %d\n", total_squared);
     return 0;
 }
 

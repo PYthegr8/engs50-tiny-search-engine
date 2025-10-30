@@ -1,0 +1,4 @@
+./indexer 1 --> 141
+./indexer 2 --> 73
+./indexer 3 --> 109
+The total count of words for the first 3 files is: 323

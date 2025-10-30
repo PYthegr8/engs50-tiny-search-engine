@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS=-Wall -pedantic -std=c11 -I. -g
-OFILES=queue.o hash.o webpage.o pageio.o
+OFILES=queue.o hash.o webpage.o pageio.o indexio.o
 
 
 all: $(OFILES)
@@ -16,4 +16,4 @@ queue:  queue.o
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f *.o  queue hash  webpage.o pageio.o ~/engs50/tse/lib/libutils.a
+	rm -f *.o  queue hash  webpage.o pageio.o indexio.o ~/engs50/tse/lib/libutils.a

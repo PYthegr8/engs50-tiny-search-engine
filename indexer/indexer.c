@@ -1,23 +1,24 @@
 /* 
- * indexer.c --- 
- * 
- * Author: Engs 50 25F, Team MergeConflict
- * Created: 10-28-2025
- * Version: 1.0
- * 
- * Description: indexer implementation for tiny search engine
- * 
- */
+* indexer.c --- 
+* 
+* Author: Engs 50 25F, Team MergeConflict
+* Created: 10-28-2025
+* Version: 1.0
+* 
+* Description: indexer implementation for tiny search engine
+* 
+*/
 
- #include <stdio.h>
- #include <stdlib.h>
- #include <string.h>
- #include "queue.h"
- #include "hash.h"
- #include <unistd.h>
- #include <ctype.h>
- #include "webpage.h"
- #include "pageio.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "queue.h"
+#include "hash.h"
+#include <unistd.h>
+#include <ctype.h>
+#include "webpage.h"
+#include "pageio.h"
+#include "indexio.h"
 
 typedef struct wordcount {                                                                                                              
     char *word;                                                                                                                         
@@ -61,7 +62,7 @@ static void sum_one_word(void *elementp);
 static void add_post(void *pp);
 static void dump_posting(void *pp);
 static void dump_wordentry(void *elementp);
-static int index_dump_multi(hashtable_t *ht, FILE *out);
+int index_dump_multi(hashtable_t *ht, FILE *out);
 static int sumwords_doc(hashtable_t *ht, int docID);
 static void free_posting(void *pp);
 static void free_wordentry(void *elementp);
@@ -123,6 +124,7 @@ int main(int argc, char *argv[]) {
         // ---- cleanup ----
         webpage_delete(page);
     } 
+    index_save(ht, "step6_file");
     index_destroy_multi(ht);
     printf("Total total word count is: %d\n", total_squared);
     return 0;
@@ -275,7 +277,7 @@ static void dump_wordentry(void *elementp) {
     g_current_word = NULL;            // clear afterward (not strictly needed)
 }
 
-static int index_dump_multi(hashtable_t *ht, FILE *out) {
+int index_dump_multi(hashtable_t *ht, FILE *out) {
     if (!ht || !out) return 1;
     g_out_multi = out;
     happly(ht, dump_wordentry);

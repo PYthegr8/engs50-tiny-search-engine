@@ -18,5 +18,5 @@
 #include <webpage.h>
 
 
-int32_t indexsave(webpage_t *pagep, int id, char *indexnm);
-webpage_t *indexload(int id, char *indexnm);
+int32_t index_save(hashtable_t *ht, int id, char *indexnm);
+hashtable_t *index_load(char *indexnm);

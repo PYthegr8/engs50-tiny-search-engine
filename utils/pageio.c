@@ -1,11 +1,11 @@
 /* 
 * pageio.c --- 
 * 
-* Author: Papa Yaw Owusu Nti
+* Author: engs50 Team MergeConflict
 * Created: 10-28-2025
 * Version: 1.0
 * 
-* Description: 
+* Description: Implementation to to load and save a webpage
 * 
 */
 
@@ -33,7 +33,6 @@ int32_t pagesave(webpage_t *pagep, int id, char *dirnm) {
     fprintf(file, "%d\n", webpage_getDepth(pagep));
     fprintf(file, "%d\n", webpage_getHTMLlen(pagep));
 
-    // optionally write the HTML content
     fprintf(file, "%s", webpage_getHTML(pagep));
 
     fclose(file);

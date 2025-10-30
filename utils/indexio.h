@@ -9,14 +9,9 @@
  * Description: saving and loading index files into indexnm
  * 
  */
-
+#include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <inttypes.h>
-#include <unistd.h>
-#include <webpage.h>
+#include "hash.h"
 
-
-int32_t index_save(hashtable_t *ht, char *indexnm);
-hashtable_t *index_load(char *indexnm);
+int32_t index_save(hashtable_t *ht, const char *indexnm);
+hashtable_t *index_load(const char *indexnm);

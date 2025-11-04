@@ -10,42 +10,78 @@ Module 6: Querier
 #include <string.h>
 #include <ctype.h>
 
-
 char *NormalizeWord(char *input);
 
-int main () {
+int main(void) {
+    char line[1000];
+
     printf("Please enter your input to the command line!\n");
-    while (1){
-        char *word = (char *)malloc(100*sizeof(char));
+
+    while (1) {
         printf("> ");
-        int result = scanf("%s", word);
-        if (result == EOF) {
+
+        if (fgets(line, sizeof(line), stdin) == NULL) {
             printf("End of file signal entered!\n");
-            return 1;
+            break;
         }
-        char *normalized = NormalizeWord(word);
-        if (normalized) {
-            printf("The word you entered is: %s\n", normalized);
+
+        line[strcspn(line, "\n")] = '\0';
+
+        if (strlen(line) == 0) {
+            continue;
         }
-        else {
+
+        char *token = strtok(line, " \t");
+        if (!token) continue;
+
+        int invalid = 0;
+        char *words[100];
+        int count = 0;
+
+        while (token != NULL) {
+            char *normalized = NormalizeWord(token);
+            if (!normalized) {
+                invalid = 1;
+                break;
+            }
+            words[count++] = normalized;
+            token = strtok(NULL, " \t");
+        }
+
+        if (invalid) {
             printf("[invalid query]\n");
-            return 1;
+            for (int i = 0; i < count; i++)
+                free(words[i]);
+            continue;
         }
+
+        for (int i = 0; i < count; i++) {
+            printf("%s", words[i]);
+            if (i < count - 1) printf(" ");
+            free(words[i]);
+        }
+        printf("\n");
     }
+
     return 0;
 }
 
-char *NormalizeWord(char *input)
-{
+char *NormalizeWord(char *input) {
     int len = strlen(input);
-    if (len < 3) return NULL;
+    if (len < 1) return NULL;
+
     char *newWord = malloc(len + 1);
     if (!newWord) return NULL;
+
     for (int i = 0; i < len; ++i) {
         unsigned char c = (unsigned char)input[i];
-        if (!isalpha(c)) { free(newWord); return NULL; }
+        if (!isalpha(c)) {
+            free(newWord);
+            return NULL;
+        }
         newWord[i] = (char)tolower(c);
     }
     newWord[len] = '\0';
     return newWord;
 }
+

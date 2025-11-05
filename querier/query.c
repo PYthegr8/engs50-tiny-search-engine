@@ -5,15 +5,44 @@ ENGS 50
 Module 6: Querier
 */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
+#include <stdbool.h>
 #include <ctype.h>
+#include <math.h>
+#include "queue.h"
+#include "hash.h"
+#include "webpage.h"
+#include "pageio.h"
+#include "indexio.h"
 
 char *NormalizeWord(char *input);
+void print_q_contents(void* elementp);
+static bool word_equals(void *elementp, const void *keyp);
+static bool doc_equals(void *elementp, const void *keyp);
+static bool build_query_string(hashtable_t *ht, char *query_string, char **words, int count);
+
+typedef struct {
+    char *word;
+    int frequency;
+} wordcount_t;
+
+typedef struct {
+    int docID;
+    int count;
+} posting_t;
+
+typedef struct {
+    char *word;
+    queue_t *plist;
+} wordentry_t;
 
 int main(void) {
     char line[1000];
+    char *file_name = "mod6_step2_index";
+    hashtable_t *ht = index_load(file_name);
 
     printf("Please enter your input to the command line!\n");
 
@@ -44,6 +73,10 @@ int main(void) {
                 invalid = 1;
                 break;
             }
+            if (!strcmp(normalized, "and") || !strcmp(normalized, "or")) {
+                token = strtok(NULL, " \t");
+                continue;
+            }
             words[count++] = normalized;
             token = strtok(NULL, " \t");
         }
@@ -54,15 +87,16 @@ int main(void) {
                 free(words[i]);
             continue;
         }
-
-        for (int i = 0; i < count; i++) {
-            printf("%s", words[i]);
-            if (i < count - 1) printf(" ");
-            free(words[i]);
+        char *query_string = (char *)malloc(10000*sizeof(char));
+        query_string[0] = '\0';
+        if (build_query_string(ht, query_string, words, count)) {
+            printf("%s\n", query_string);
+            free(query_string);
         }
-        printf("\n");
+        else {
+            printf("No matches found for your query!\n");
+        }
     }
-
     return 0;
 }
 
@@ -85,3 +119,45 @@ char *NormalizeWord(char *input) {
     return newWord;
 }
 
+static bool word_equals(void *elementp, const void *keyp)
+{
+    const wordentry_t *we = (const wordentry_t *)elementp;
+    return strcmp(we->word, (const char *)keyp) == 0;
+}
+
+static bool doc_equals(void *elementp, const void *keyp)
+{
+    const posting_t *p = (const posting_t *)elementp;
+    return p->docID == *(const int *)keyp;
+}
+
+static bool build_query_string(hashtable_t *ht, char *query_string, char **words, int count) {
+    int lowest = INT_MAX;
+    int word_match_count = 0;
+    for (int i = 0; i < count; i++) {
+        // words[i] -> word at index i
+        int keylen = (int)strlen(words[i]) + 1;
+        int docID = 1;
+        wordentry_t *we = hsearch(ht, word_equals, words[i], keylen);
+        if (we) {
+            posting_t *p = qsearch(we->plist, doc_equals, &docID);
+            if (p) {
+                word_match_count++;
+                char buffer[20];
+                int count = p->count;
+                sprintf(buffer, "%d", count);
+                lowest = fmin(lowest, count); 
+                strcat(query_string, words[i]);
+                strcat(query_string, ":");
+                strcat(query_string, buffer);
+                strcat(query_string, " ");
+            }
+        }
+        free(words[i]);
+    }
+    char lowest_buffer[20];
+    sprintf(lowest_buffer, "%d", lowest);
+    strcat(query_string, "-- ");
+    strcat(query_string, lowest_buffer);
+    return word_match_count ? true : false;
+}

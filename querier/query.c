@@ -16,49 +16,197 @@ typedef struct { int docID; int count; } posting_t;
 typedef struct { char *word; queue_t *plist; } wordentry_t;
 
 char *NormalizeWord(char *input);
-static bool word_equals(void *elementp, const void *keyp);
-static bool doc_equals(void *elementp, const void *keyp);
-static char *get_url(const char *pagedir, int docID);
 static char *xstrdup(const char *s);
+static char *get_url(const char *pagedir, int docID);
 static result_t *get_postings_for_word(hashtable_t *ht, const char *word, int *outn);
-static result_t *set_and(result_t *a, int na, result_t *b, int nb, int *routn);
-static result_t *set_or(result_t *a, int na, result_t *b, int nb, int *routn);
-static void free_results(result_t *r);
-static char **tokenize_expr(char *s, int *tokc);
-static char **infix_to_postfix(char **toks, int tc, int *pcount);
-static bool process_query_expression(hashtable_t *ht, const char *pagedir, char *input);
+static result_t *compute_and_sequence(hashtable_t *ht, char **words, int wcount, int *outn);
+static result_t *or_merge(result_t *acc, int accn, result_t *seqr, int seqn, int *outn);
+static int find_docidx(result_t *arr, int n, int docID);
 static int compare_results(const void *a, const void *b);
-static void free_token_list(char **toks, int n);
+static bool word_equals(void *elementp, const void *keyp);
+static void free_posting(void *pp);
+static void free_wordentry(void *ep);
+static void index_destroy(hashtable_t *ht);
 
 int main(int argc, char *argv[])
 {
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <pagedir> <indexfile>\n", argv[0]);
+    if (argc != 3 && argc != 4) {
+        fprintf(stderr, "Usage: %s <pagedir> <indexfile> [-q]\n", argv[0]);
         return 1;
     }
+
     const char *pagedir = argv[1];
-    char *indexfile = argv[2];
+    const char *indexfile = argv[2];
+    bool quiet = false;
+    if (argc == 4) {
+        if (strcmp(argv[3], "-q") != 0) {
+            fprintf(stderr, "Usage: %s <pagedir> <indexfile> [-q]\n", argv[0]);
+            return 1;
+        }
+        quiet = true;
+    }
+
     DIR *d = opendir(pagedir);
     if (!d) {
         fprintf(stderr, "Error: pagedir '%s' does not exist\n", pagedir);
         return 1;
     }
     closedir(d);
-    hashtable_t *ht = index_load(indexfile);
+
+    hashtable_t *ht = index_load((char *)indexfile);
     if (!ht) {
         fprintf(stderr, "Error: could not load index file '%s'\n", indexfile);
         return 1;
     }
-    char line[1000];
+
+    char rawline[2000];
     while (1) {
-        printf("> ");
-        if (fgets(line, sizeof line, stdin) == NULL) break;
-        line[strcspn(line, "\n")] = '\0';
-        if (strlen(line) == 0) continue;
-        bool ok = process_query_expression(ht, pagedir, line);
-        if (!ok) printf("No matches found for your query!\n");
+        if (!quiet) printf("> ");
+        if (fgets(rawline, sizeof rawline, stdin) == NULL) break;
+        rawline[strcspn(rawline, "\r\n")] = '\0';
+        if (strlen(rawline) == 0) continue;
+
+        char linecopy[2000];
+        strncpy(linecopy, rawline, sizeof linecopy);
+        linecopy[sizeof linecopy - 1] = '\0';
+
+        char *tokens[256];
+        int tcount = 0;
+        char *tok = strtok(linecopy, " \t");
+        while (tok && tcount < 256) {
+            tokens[tcount++] = tok;
+            tok = strtok(NULL, " \t");
+        }
+        if (tcount == 0) continue;
+
+        char *normalized_tokens[256];
+        int tok_type[256];
+        bool invalid = false;
+        for (int i = 0; i < tcount; ++i) {
+            char low[256];
+            size_t L = strlen(tokens[i]);
+            if (L >= sizeof low) { invalid = true; break; }
+            for (size_t k = 0; k < L; ++k) low[k] = (char)tolower((unsigned char)tokens[i][k]);
+            low[L] = '\0';
+            if (strcmp(low, "and") == 0) { tok_type[i] = 1; normalized_tokens[i] = NULL; }
+            else if (strcmp(low, "or") == 0) { tok_type[i] = 2; normalized_tokens[i] = NULL; }
+            else {
+                char *norm = NormalizeWord(tokens[i]);
+                if (!norm) { invalid = true; break; }
+                tok_type[i] = 0;
+                normalized_tokens[i] = norm;
+            }
+        }
+
+        if (invalid) {
+            printf("[invalid query]\n");
+            for (int i = 0; i < tcount; ++i)
+                if (tok_type[i] == 0 && normalized_tokens[i]) free(normalized_tokens[i]);
+            continue;
+        }
+
+        if (tok_type[0] != 0 || tok_type[tcount - 1] != 0) {
+            printf("[invalid query]\n");
+            for (int i = 0; i < tcount; ++i)
+                if (tok_type[i] == 0 && normalized_tokens[i]) free(normalized_tokens[i]);
+            continue;
+        }
+
+        bool syntax_ok = true;
+        for (int i = 0; i < tcount; ++i) {
+            if (tok_type[i] == 1 || tok_type[i] == 2) {
+                if (i == 0 || i == tcount - 1) { syntax_ok = false; break; }
+                if (tok_type[i-1] != 0 || tok_type[i+1] != 0) { syntax_ok = false; break; }
+            }
+        }
+        if (!syntax_ok) {
+            printf("[invalid query]\n");
+            for (int i = 0; i < tcount; ++i)
+                if (tok_type[i] == 0 && normalized_tokens[i]) free(normalized_tokens[i]);
+            continue;
+        }
+
+        char **seq_words[128];
+        int seq_counts[128];
+        int seq_cap[128];
+        int seqs = 0;
+        seq_words[0] = NULL;
+        seq_counts[0] = 0;
+        seq_cap[0] = 0;
+
+        for (int i = 0; i < tcount; ++i) {
+            if (tok_type[i] == 2) {
+                seqs++;
+                seq_words[seqs] = NULL;
+                seq_counts[seqs] = 0;
+                seq_cap[seqs] = 0;
+                continue;
+            }
+            if (tok_type[i] == 1) continue;
+            if (seq_counts[seqs] == 0) {
+                seq_cap[seqs] = 4;
+                seq_words[seqs] = malloc(seq_cap[seqs] * sizeof(char*));
+            }
+            if (seq_counts[seqs] >= seq_cap[seqs]) {
+                seq_cap[seqs] *= 2;
+                seq_words[seqs] = realloc(seq_words[seqs], seq_cap[seqs] * sizeof(char*));
+            }
+            seq_words[seqs][seq_counts[seqs]++] = normalized_tokens[i];
+            normalized_tokens[i] = NULL;
+        }
+
+        int total_sequences = seqs + 1;
+
+        result_t *acc = NULL;
+        int accn = 0;
+        for (int s = 0; s < total_sequences; ++s) {
+            int seqn = seq_counts[s];
+            if (seqn == 0) continue;
+            int seqr_n = 0;
+            result_t *seqr = compute_and_sequence(ht, seq_words[s], seqn, &seqr_n);
+            if (seqr == NULL || seqr_n == 0) {
+                if (seqr) free(seqr);
+                continue;
+            }
+            int newn = 0;
+            result_t *newacc = or_merge(acc, accn, seqr, seqr_n, &newn);
+            if (acc) free(acc);
+            acc = newacc;
+            accn = newn;
+            free(seqr);
+        }
+
+        for (int s = 0; s < total_sequences; ++s) {
+            if (seq_words[s]) {
+                for (int j = 0; j < seq_counts[s]; ++j)
+                    free(seq_words[s][j]);
+                free(seq_words[s]);
+            }
+        }
+
+        if (accn == 0 || acc == NULL) {
+            printf("No matches found for your query!\n");
+            if (acc) free(acc);
+            for (int i = 0; i < tcount; ++i)
+                if (tok_type[i] == 0 && normalized_tokens[i]) free(normalized_tokens[i]);
+            continue;
+        }
+
+        qsort(acc, (size_t)accn, sizeof *acc, compare_results);
+
+        for (int i = 0; i < accn; ++i) {
+            char *url = get_url(pagedir, acc[i].docID);
+            if (!url) url = xstrdup("URL_NOT_FOUND");
+            printf("rank: %d: doc: %d : %s\n", acc[i].rank, acc[i].docID, url);
+            free(url);
+        }
+
+        free(acc);
+        for (int i = 0; i < tcount; ++i)
+            if (tok_type[i] == 0 && normalized_tokens[i]) free(normalized_tokens[i]);
     }
-    hclose(ht);
+
+    index_destroy(ht);
     return 0;
 }
 
@@ -79,14 +227,17 @@ char *NormalizeWord(char *input)
 
 static bool word_equals(void *elementp, const void *keyp)
 {
-    const wordentry_t *we = (const wordentry_t *)elementp;
-    return strcmp(we->word, (const char *)keyp) == 0;
+    wordentry_t *we = (wordentry_t *)elementp;
+    const char *key = (const char *)keyp;
+    return strcmp(we->word, key) == 0;
 }
 
-static bool doc_equals(void *elementp, const void *keyp)
+static char *xstrdup(const char *s)
 {
-    const posting_t *p = (const posting_t *)elementp;
-    return p->docID == *(const int *)keyp;
+    size_t n = strlen(s) + 1;
+    char *p = malloc(n);
+    if (p) memcpy(p, s, n);
+    return p;
 }
 
 static char *get_url(const char *pagedir, int docID)
@@ -102,23 +253,17 @@ static char *get_url(const char *pagedir, int docID)
     return xstrdup(buf);
 }
 
-static char *xstrdup(const char *s)
-{
-    size_t n = strlen(s) + 1;
-    char *p = malloc(n);
-    if (p) memcpy(p, s, n);
-    return p;
-}
-
 static result_t *get_postings_for_word(hashtable_t *ht, const char *word, int *outn)
 {
     *outn = 0;
     int keylen = (int)strlen(word) + 1;
     wordentry_t *we = hsearch(ht, word_equals, (char *)word, keylen);
     if (!we) return NULL;
-    int cap = 32;
+
+    int cap = 16;
     result_t *arr = malloc((size_t)cap * sizeof *arr);
     if (!arr) return NULL;
+
     queue_t *plist = we->plist;
     queue_t *tmp = qopen();
     void *p;
@@ -136,145 +281,75 @@ static result_t *get_postings_for_word(hashtable_t *ht, const char *word, int *o
     }
     while ((p = qget(tmp)) != NULL) qput(plist, p);
     qclose(tmp);
+
     if (*outn == 0) { free(arr); return NULL; }
     return arr;
 }
 
-static result_t *set_and(result_t *a, int na, result_t *b, int nb, int *routn)
+static result_t *compute_and_sequence(hashtable_t *ht, char **words, int wcount, int *outn)
 {
-    *routn = 0;
-    if (!a || !b || na == 0 || nb == 0) return NULL;
-    int cap = na < nb ? na : nb;
+    *outn = 0;
+    if (wcount == 0) return NULL;
+    int n0 = 0;
+    result_t *cur = get_postings_for_word(ht, words[0], &n0);
+    if (!cur || n0 == 0) { if (cur) free(cur); return NULL; }
+
+    for (int i = 1; i < wcount; ++i) {
+        int ni = 0;
+        result_t *next = get_postings_for_word(ht, words[i], &ni);
+        if (!next || ni == 0) { if (next) free(next); free(cur); return NULL; }
+
+        int cap = n0 < ni ? n0 : ni;
+        result_t *merged = malloc((size_t)(cap > 0 ? cap : 1) * sizeof *merged);
+        int m = 0;
+        for (int a = 0; a < n0; ++a) {
+            int idx = find_docidx(next, ni, cur[a].docID);
+            if (idx >= 0) {
+                int r = cur[a].rank < next[idx].rank ? cur[a].rank : next[idx].rank;
+                merged[m].docID = cur[a].docID;
+                merged[m].rank = r;
+                m++;
+            }
+        }
+        free(cur);
+        free(next);
+        if (m == 0) { free(merged); return NULL; }
+        cur = merged;
+        n0 = m;
+    }
+    *outn = n0;
+    return cur;
+}
+
+static result_t *or_merge(result_t *acc, int accn, result_t *seqr, int seqn, int *outn)
+{
+    if ((!acc || accn == 0) && (!seqr || seqn == 0)) { *outn = 0; return NULL; }
+
+    int cap = (accn > 0 ? accn : 0) + (seqn > 0 ? seqn : 0);
     result_t *out = malloc((size_t)(cap > 0 ? cap : 1) * sizeof *out);
     int n = 0;
-    for (int i = 0; i < na; ++i) {
-        for (int j = 0; j < nb; ++j) {
-            if (a[i].docID == b[j].docID) {
-                int rank = a[i].rank < b[j].rank ? a[i].rank : b[j].rank;
-                out[n].docID = a[i].docID;
-                out[n].rank = rank;
-                n++;
-                break;
-            }
+
+    if (acc && accn > 0) {
+        for (int i = 0; i < accn; ++i) out[n++] = acc[i];
+    }
+
+    if (seqr && seqn > 0) {
+        for (int j = 0; j < seqn; ++j) {
+            int idx = find_docidx(out, n, seqr[j].docID);
+            if (idx >= 0) out[idx].rank += seqr[j].rank;
+            else out[n++] = seqr[j];
         }
     }
-    if (n == 0) { free(out); *routn = 0; return NULL; }
-    *routn = n;
+
+    *outn = n;
     return out;
 }
 
-static result_t *set_or(result_t *a, int na, result_t *b, int nb, int *routn)
+static int find_docidx(result_t *arr, int n, int docID)
 {
-    *routn = 0;
-    if ((!a || na == 0) && (!b || nb == 0)) return NULL;
-
-    int cap = (na > 0 ? na : 0) + (nb > 0 ? nb : 0);
-    result_t *out = malloc((size_t)(cap > 0 ? cap : 1) * sizeof *out);
-    int n = 0;
-
-    if (a && na > 0) {
-        for (int i = 0; i < na; ++i) {
-            out[n++] = a[i]; // copy a
-        }
-    }
-
-    if (b && nb > 0) {
-        for (int j = 0; j < nb; ++j) {
-            int found = 0;
-            for (int i = 0; i < n; ++i) {
-                if (out[i].docID == b[j].docID) {
-                    out[i].rank += b[j].rank; // SUM counts when present in both
-                    found = 1;
-                    break;
-                }
-            }
-            if (!found) {
-                out[n++] = b[j]; // append unique from b
-            }
-        }
-    }
-
-    *routn = n;
-    return out;
-}
-
-static void free_results(result_t *r) { free(r); }
-
-static char **tokenize_expr(char *s, int *tokc)
-{
-    int cap = 32;
-    char **toks = malloc((size_t)cap * sizeof *toks);
-    int n = 0;
-    int i = 0;
-    while (s[i]) {
-        while (isspace((unsigned char)s[i])) ++i;
-        if (!s[i]) break;
-        if (s[i] == '(' || s[i] == ')') {
-            char tmp[2] = { s[i], '\0' };
-            if (n >= cap) { cap *= 2; toks = realloc(toks, (size_t)cap * sizeof *toks); }
-            toks[n++] = xstrdup(tmp);
-            ++i;
-            continue;
-        }
-        int j = i;
-        while (s[j] && !isspace((unsigned char)s[j]) && s[j] != '(' && s[j] != ')') ++j;
-        int len = j - i;
-        char *tok = malloc((size_t)len + 1);
-        memcpy(tok, &s[i], (size_t)len);
-        tok[len] = '\0';
-        if (n >= cap) { cap *= 2; toks = realloc(toks, (size_t)cap * sizeof *toks); }
-        toks[n++] = tok;
-        i = j;
-    }
-    *tokc = n;
-    return toks;
-}
-
-static char **infix_to_postfix(char **toks, int tc, int *pcount)
-{
-    char **out = malloc((size_t)tc * sizeof *out);
-    char **op = malloc((size_t)tc * sizeof *op);
-    int opn = 0;
-    int outn = 0;
-    for (int i = 0; i < tc; ++i) {
-        char *t = toks[i];
-        char lowbuf[256];
-        int L = (int)strlen(t);
-        for (int k = 0; k < L && k < (int)sizeof lowbuf - 1; ++k) lowbuf[k] = (char)tolower((unsigned char)t[k]);
-        lowbuf[L] = '\0';
-        if (!strcmp(lowbuf, "and") || !strcmp(lowbuf, "or")) {
-            int prec = !strcmp(lowbuf, "and") ? 2 : 1;
-            while (opn > 0) {
-                char *top = op[opn-1];
-                char toplowbuf[256];
-                int TL = (int)strlen(top);
-                for (int k = 0; k < TL && k < (int)sizeof toplowbuf - 1; ++k) toplowbuf[k] = (char)tolower((unsigned char)top[k]);
-                toplowbuf[TL] = '\0';
-                if (!strcmp(toplowbuf, "(")) break;
-                int tprec = !strcmp(toplowbuf, "and") ? 2 : 1;
-                if (tprec >= prec) { out[outn++] = op[--opn]; } else break;
-            }
-            op[opn++] = toks[i];
-        } else if (!strcmp(lowbuf, "(")) {
-            op[opn++] = toks[i];
-        } else if (!strcmp(lowbuf, ")")) {
-            while (opn > 0 && strcmp(op[opn-1], "(") != 0) out[outn++] = op[--opn];
-            if (opn > 0 && !strcmp(op[opn-1], "(")) opn--;
-        } else {
-            out[outn++] = toks[i];
-        }
-    }
-    while (opn > 0) out[outn++] = op[--opn];
-    free(op);
-    *pcount = outn;
-    return out;
-}
-
-static void free_token_list(char **toks, int n)
-{
-    if (!toks) return;
-    for (int i = 0; i < n; ++i) free(toks[i]);
-    free(toks);
+    if (!arr || n == 0) return -1;
+    for (int i = 0; i < n; ++i) if (arr[i].docID == docID) return i;
+    return -1;
 }
 
 static int compare_results(const void *a, const void *b)
@@ -285,62 +360,25 @@ static int compare_results(const void *a, const void *b)
     return ra->docID - rb->docID;
 }
 
-static bool process_query_expression(hashtable_t *ht, const char *pagedir, char *input)
+static void free_posting(void *pp)
 {
-    int tc;
-    char **toks = tokenize_expr(input, &tc);
-    if (tc == 0) { free(toks); return false; }
-    for (int i = 0; i < tc; ++i) {
-        for (char *p = toks[i]; *p; ++p) *p = (char)tolower((unsigned char)*p);
+    free(pp);
+}
+
+static void free_wordentry(void *ep)
+{
+    wordentry_t *we = (wordentry_t *)ep;
+    if (we->plist) {
+        qapply(we->plist, free_posting);
+        qclose(we->plist);
     }
-    int pc;
-    char **post = infix_to_postfix(toks, tc, &pc);
-    typedef struct { result_t *arr; int len; } stkent;
-    stkent *stack = malloc((size_t)(pc + 2) * sizeof *stack);
-    int sn = 0;
-    bool invalid = false;
-    for (int i = 0; i < pc; ++i) {
-        char *t = post[i];
-        if (!strcmp(t, "and") || !strcmp(t, "or")) {
-            if (sn < 2) { invalid = true; break; }
-            stkent b = stack[--sn];
-            stkent a = stack[--sn];
-            stkent res;
-            if (!strcmp(t, "and")) {
-                res.arr = set_and(a.arr, a.len, b.arr, b.len, &res.len);
-            } else {
-                res.arr = set_or(a.arr, a.len, b.arr, b.len, &res.len);
-            }
-            free_results(a.arr);
-            free_results(b.arr);
-            stack[sn++] = res;
-        } else if (!strcmp(t, "(") || !strcmp(t, ")")) {
-            invalid = true;
-            break;
-        } else {
-            int n;
-            result_t *plist = get_postings_for_word(ht, t, &n);
-            stkent s; s.arr = plist; s.len = n;
-            stack[sn++] = s;
-        }
-    }
-    free_token_list(toks, tc);
-    free(post);
-    if (invalid || sn != 1) {
-        for (int k = 0; k < sn; ++k) free_results(stack[k].arr);
-        free(stack);
-        return false;
-    }
-    stkent final = stack[0];
-    free(stack);
-    if (final.len == 0) { free_results(final.arr); return false; }
-    qsort(final.arr, final.len, sizeof *final.arr, compare_results);
-    for (int i = 0; i < final.len; ++i) {
-        char *url = get_url(pagedir, final.arr[i].docID);
-        if (!url) url = xstrdup("URL_NOT_FOUND");
-        printf("rank: %d: doc: %d : %s\n", final.arr[i].rank, final.arr[i].docID, url);
-        free(url);
-    }
-    free_results(final.arr);
-    return true;
+    free(we->word);
+    free(we);
+}
+
+static void index_destroy(hashtable_t *ht)
+{
+    if (!ht) return;
+    happly(ht, free_wordentry);
+    hclose(ht);
 }

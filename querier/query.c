@@ -82,6 +82,10 @@ int main(int argc, char *argv[])
         char *normalized_tokens[256];
         int tok_type[256];
         bool invalid = false;
+        for (int i = 0; i < 256; ++i) {
+            normalized_tokens[i] = NULL;
+            tok_type[i] = -1;
+        }
         for (int i = 0; i < tcount; ++i) {
             char low[256];
             size_t L = strlen(tokens[i]);

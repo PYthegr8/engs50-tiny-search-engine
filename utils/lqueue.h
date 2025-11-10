@@ -11,21 +11,21 @@
 typedef void lqueue_t;		
 
 /* create an empty lock queue */
-queue_t* lqopen(void);        
+lqueue_t* lqopen(void);        
 
 /* deallocate a lock queue, frees everything in it */
-void lqclose(queue_t *qp);   
+void lqclose(lqueue_t *lqp);   
 
 /* put element at the end of the lock queue
  * returns 0 is successful; nonzero otherwise 
  */
-int32_t lqput(queue_t *qp, void *elementp); 
+int32_t lqput(lqueue_t *lqp, void *elementp); 
 
 /* get the first first element from lock queue, removing it from the lock queue */
-void* lqget(queue_t *qp);
+void* lqget(lqueue_t *lqp);
 
 /* apply a function to every element of the lock queue */
-void lqapply(queue_t *qp, void (*fn)(void* elementp));
+void lqapply(lqueue_t *lqp, void (*fn)(void* elementp));
 
 /* search a lock queue using a supplied boolean function
  * skeyp -- a key to search for
@@ -36,7 +36,7 @@ void lqapply(queue_t *qp, void (*fn)(void* elementp));
  *          -- returns TRUE or FALSE as defined in bool.h
  * returns a pointer to an element, or NULL if not found
  */
-void* lqsearch(queue_t *qp, 
+void* lqsearch(lqueue_t *lqp, 
 							bool (*searchfn)(void* elementp,const void* keyp),
 							const void* skeyp);
 
@@ -44,12 +44,12 @@ void* lqsearch(queue_t *qp,
  * removes the element from the lock queue and returns a pointer to it or
  * NULL if not found
  */
-void* lqremove(queue_t *qp,
+void* lqremove(lqueue_t *lqp,
 							bool (*searchfn)(void* elementp,const void* keyp),
 							const void* skeyp);
 
 /* concatenatenates elements of q2 into q1
  * q2 is dealocated, closed, and unusable upon completion 
  */
-void lqconcat(queue_t *q1p, queue_t *q2p);
+void lqconcat(lqueue_t *lq1p, lqueue_t *lq2p);
 

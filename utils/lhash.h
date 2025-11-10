@@ -25,7 +25,7 @@ int32_t lhput(lhashtable_t *htp, void *ep, const char *key, int keylen);
 
 
 /* lhapply -- applies a function to every entry in hash table */
-void happly(lhashtable_t *htp, void (*fn)(void* ep));
+void lhapply(lhashtable_t *htp, void (*fn)(void* ep));
 
 
 /* lhsearch -- searchs for an entry under a designated key using a

@@ -56,3 +56,28 @@ static uint32_t SuperFastHash(const char *data, int len, uint32_t tablesize) {
     hash += hash >> 6;
     return hash % tablesize;
 }
+
+
+
+lhashtable_t *lhopen(uint32_t hsize) {
+}
+
+
+lhashtable_t *lhopen(uint32_t hsize) {
+}
+
+void lhclose(lhashtable_t *htp) {
+}
+
+int32_t lhput(lhashtable_t *htp, void *ep, const char *key, int keylen) {
+}
+
+void *lhremove(lhashtable_t *htp, bool (*searchfn)(void*, const void*), const char *key, int32_t keylen) {
+}
+
+void *lhsearch(lhashtable_t *htp, bool (*searchfn)(void*, const void*), const char *key, int32_t keylen) {
+}
+
+void lhapply(lhashtable_t *htp, void (*fn)(void*)) {
+}
+

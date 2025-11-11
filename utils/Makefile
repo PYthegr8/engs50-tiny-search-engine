@@ -12,8 +12,11 @@ hash: queue.o hash.o
 queue:  queue.o
 	$(CC) $(CFLAGS) $^ -o $@
 
+test_lhash: test_lhash.c lhash.o hash.o queue.o lqueue.o
+	$(CC) $(CFLAGS) $^ -o $@
+
 %.o: %.c %.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f *.o lhash lqueue queue hash  webpage.o pageio.o indexio.o ~/engs50/tse/lib/libutils.a
+	rm -f *.o test_lhash lhash lqueue queue hash  webpage.o pageio.o indexio.o ~/engs50/tse/lib/libutils.a

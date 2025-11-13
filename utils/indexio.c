@@ -16,6 +16,7 @@
 #include "queue.h"
 #include "hash.h"
 #include "indexio.h"
+#include "lhash.h"
 
 typedef struct { int docID; int count; } posting_t;
 typedef struct { char *word; queue_t *plist; } wordentry_t;
@@ -28,14 +29,14 @@ static char *xstrdup(const char *s)
     return p;
 }
 
-static int index_dump_multi(hashtable_t *ht, FILE *out);
+static int index_dump_multi(lhashtable_t *ht, FILE *out);
 static void dump_word_apply(void *elem);
 static void dump_posting_apply(void *ep);
 static int parse_line_into_entry(const char *line, wordentry_t **out_we);
 
 static FILE *g_out = NULL;
 
-int32_t index_save(hashtable_t *ht, const char *indexnm)
+int32_t index_save(lhashtable_t *ht, const char *indexnm)
 {
     if (!ht || !indexnm) return EXIT_FAILURE;
     FILE *file = fopen(indexnm, "w");
@@ -45,13 +46,13 @@ int32_t index_save(hashtable_t *ht, const char *indexnm)
     return (rc == 0) ? 0 : EXIT_FAILURE;
 }
 
-hashtable_t *index_load(const char *indexnm)
+lhashtable_t *index_load(const char *indexnm)
 {
     if (!indexnm) return NULL;
     FILE *fp = fopen(indexnm, "r");
     if (!fp) return NULL;
 
-    hashtable_t *ht = hopen(1024);
+    lhashtable_t *ht = lhopen(1024);
     if (!ht) { fclose(fp); return NULL; }
 
     char line[8192];
@@ -63,14 +64,16 @@ hashtable_t *index_load(const char *indexnm)
         wordentry_t *we = NULL;
         if (parse_line_into_entry(line, &we) != 0) {
             fclose(fp);
+            lhclose(ht);
             return NULL;
         }
-        if (hput(ht, we, we->word, (int)strlen(we->word) + 1) != 0) {
+        if (lhput(ht, we, we->word, (int)strlen(we->word) + 1) != 0) {
             qapply(we->plist, free);
             qclose(we->plist);
             free(we->word);
             free(we);
             fclose(fp);
+            lhclose(ht);
             return NULL;
         }
     }
@@ -79,11 +82,11 @@ hashtable_t *index_load(const char *indexnm)
     return ht;
 }
 
-static int index_dump_multi(hashtable_t *ht, FILE *out)
+static int index_dump_multi(lhashtable_t *ht, FILE *out)
 {
     if (!ht || !out) return -1;
     g_out = out;
-    happly(ht, dump_word_apply);
+    lhapply(ht, dump_word_apply);
     g_out = NULL;
     return 0;
 }
@@ -167,3 +170,4 @@ static int parse_line_into_entry(const char *line, wordentry_t **out_we)
     *out_we = we;
     return 0;
 }
+

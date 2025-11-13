@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "hash.h"
+#include <lhash.h>
 
-int32_t index_save(hashtable_t *ht, const char *indexnm);
-hashtable_t *index_load(const char *indexnm);
+int32_t index_save(lhashtable_t *ht, const char *indexnm);
+lhashtable_t *index_load(const char *indexnm);

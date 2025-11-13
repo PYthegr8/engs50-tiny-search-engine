@@ -13,7 +13,7 @@ queue:  queue.o
 	$(CC) $(CFLAGS) $^ -o $@
 
 test_lhash: test_lhash.c lhash.o hash.o queue.o lqueue.o
-	$(CC) $(CFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) $^ -o $@ -pthread
 
 %.o: %.c %.h
 	$(CC) $(CFLAGS) -c $< -o $@

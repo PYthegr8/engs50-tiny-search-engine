@@ -21,6 +21,7 @@
 #include "webpage.h"
 #include "pageio.h"
 #include "indexio.h"
+#include "lhash.h"
 
 typedef struct {
     char *word;
@@ -41,7 +42,7 @@ typedef struct {
     int start;
     int end;
     char *pagedir;
-    hashtable_t *ht;
+    lhashtable_t *ht;
 } index_args_t;
 
 static char *xstrdup(const char *s) {
@@ -93,14 +94,14 @@ static posting_t *posting_init(int docID) {
     return p;
 }
 
-static int index_update_doc(hashtable_t *ht, const char *norm_word, int docID) {
+static int index_update_doc(lhashtable_t *ht, const char *norm_word, int docID) {
     if (!ht || !norm_word) return 1;
     int keylen = (int)strlen(norm_word) + 1;
-    wordentry_t *we = hsearch(ht, word_equals, norm_word, keylen);
+    wordentry_t *we = lhsearch(ht, word_equals, norm_word, keylen);
     if (!we) {
         we = wordentry_init(norm_word);
         if (!we) return 2;
-        if (hput(ht, we, we->word, (int)strlen(we->word) + 1) != 0) {
+        if (lhput(ht, we, we->word, (int)strlen(we->word) + 1) != 0) {
             qclose(we->plist);
             free(we->word);
             free(we);
@@ -132,10 +133,10 @@ static void free_wordentry(void *elementp) {
     free(we);
 }
 
-static void index_destroy_multi(hashtable_t *ht) {
+static void index_destroy_multi(lhashtable_t *ht) {
     if (!ht) return;
-    happly(ht, free_wordentry);
-    hclose(ht);
+    lhapply(ht, free_wordentry);
+    lhclose(ht);
 }
 
 int count_files(char *pagedir) {
@@ -149,7 +150,7 @@ int count_files(char *pagedir) {
     return count;
 }
 
-void index(int start, int end, char *pagedir, hashtable_t *ht) {
+void index(int start, int end, char *pagedir, lhashtable_t *ht) {
     for (int docID = start; docID <= end; docID++) {
         webpage_t *page = pageload(docID, (char *)pagedir);
         if (!page) break;
@@ -190,7 +191,7 @@ int main(int argc, char *argv[]) {
     }
     closedir(d);
 
-    hashtable_t *ht = hopen(2048);
+    lhashtable_t *ht = lhopen(2048);
     if (!ht) {
         fprintf(stderr, "Error: hopen failed\n");
         return 1;
@@ -199,7 +200,7 @@ int main(int argc, char *argv[]) {
     int total_files = count_files(pagedir);
     if (!total_files) {
         fprintf(stderr, "[Error: no files found in the directory]\n");
-        hclose(ht);
+        lhclose(ht);
         return 1;
     }
 
@@ -212,7 +213,7 @@ int main(int argc, char *argv[]) {
     pthread_t *threads = malloc(num_threads * sizeof(pthread_t));
     if (!threads) {
         fprintf(stderr, "Error: malloc threads failed\n");
-        hclose(ht);
+        lhclose(ht);
         return 1;
     }
 

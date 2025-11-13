@@ -42,7 +42,6 @@ typedef struct {
     int end;
     char *pagedir;
     hashtable_t *ht;
-    char *indexnm;
 } index_args_t;
 
 static char *xstrdup(const char *s) {
@@ -145,11 +144,12 @@ int count_files(char *pagedir) {
         webpage_t *page = pageload(docID, (char *)pagedir);
         if (!page) break;
         count++;
+        webpage_delete(page);
     }
     return count;
 }
 
-void index(int start, int end, char *pagedir, hashtable_t *ht, char *indexnm) {
+void index(int start, int end, char *pagedir, hashtable_t *ht) {
     for (int docID = start; docID <= end; docID++) {
         webpage_t *page = pageload(docID, (char *)pagedir);
         if (!page) break;
@@ -165,46 +165,22 @@ void index(int start, int end, char *pagedir, hashtable_t *ht, char *indexnm) {
         }
         webpage_delete(page);
     }
-    if (index_save(ht, indexnm) != 0) {
-        fprintf(stderr, "Error: index_save failed for '%s'\n", indexnm);
-        index_destroy_multi(ht);
-        return;
-    }
-    return;
 }
 
 void *index_thread(void *arg) {
     index_args_t *args = (index_args_t *)arg;
-    index(args->start, args->end, args->pagedir, args->ht, args->indexnm);
+    index(args->start, args->end, args->pagedir, args->ht);
     free(arg);
     return NULL;
 }
-
-/*
-for (docID = 1;;docID++) {
-    webpage_t *page = pageload(docID, (char *)pagedir);
-    if (!page) break;
-    int pos = 0;
-    char *raw = NULL;
-    while ((pos = webpage_getNextWord(page, pos, &raw)) > 0) {
-        char *norm = NormalizeWord(raw);
-        if (norm) {
-            index_update_doc(ht, norm, docID);
-            free(norm);
-        }
-        free(raw);
-    }
-    webpage_delete(page);
-}
-*/
 
 int main(int argc, char *argv[]) {
     if (argc != 4) {
         fprintf(stderr, "Usage: %s <pagedir> <indexnm> <num_threads>\n", argv[0]);
         return 1;
     }
-    const char *pagedir = argv[1];
-    const char *indexnm = argv[2];
+    char *pagedir = argv[1];
+    char *indexnm = argv[2];
     int num_threads = atoi(argv[3]);
 
     DIR *d = opendir(pagedir);
@@ -220,28 +196,68 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    int start = 1;
-    int files_per_thread = count_files((char *)pagedir);
-    if (!files_per_thread) {
+    int total_files = count_files(pagedir);
+    if (!total_files) {
         fprintf(stderr, "[Error: no files found in the directory]\n");
+        hclose(ht);
         return 1;
     }
-    files_per_thread /= num_threads;
 
-    int thread_num = num_threads;
-    while (thread_num--) {
-        pthread_t thread_num;
-        int end = start + files_per_thread;
-        start = end;
-        index_args_t args = { .start = start, .end = end, .pagedir = (char *)pagedir, .ht = ht, .indexnm = (char *)indexnm };
-        pthread_create(&thread_num, NULL, index_thread, &args);
+    if (num_threads <= 0) num_threads = 1;
+    if (num_threads > total_files) num_threads = total_files;
+
+    int base = total_files / num_threads;
+    int extra = total_files % num_threads;
+
+    pthread_t *threads = malloc(num_threads * sizeof(pthread_t));
+    if (!threads) {
+        fprintf(stderr, "Error: malloc threads failed\n");
+        hclose(ht);
+        return 1;
     }
 
-    for (int i = 1; i <= num_threads; i++) {
-        pthread_join(i, NULL);
+    int current = 1;
+    for (int i = 0; i < num_threads; i++) {
+        int my_count = base + (i < extra ? 1 : 0);
+        int start = current;
+        int end = current + my_count - 1;
+        current = end + 1;
+
+        index_args_t *args = malloc(sizeof(index_args_t));
+        if (!args) {
+            fprintf(stderr, "Error: malloc args failed\n");
+            free(threads);
+            index_destroy_multi(ht);
+            return 1;
+        }
+        args->start = start;
+        args->end = end;
+        args->pagedir = pagedir;
+        args->ht = ht;
+
+        if (pthread_create(&threads[i], NULL, index_thread, args) != 0) {
+            fprintf(stderr, "Error: pthread_create failed\n");
+            free(args);
+            for (int j = 0; j < i; j++) {
+                pthread_join(threads[j], NULL);
+            }
+            free(threads);
+            index_destroy_multi(ht);
+            return 1;
+        }
+    }
+
+    for (int i = 0; i < num_threads; i++) {
+        pthread_join(threads[i], NULL);
+    }
+    free(threads);
+
+    if (index_save(ht, indexnm) != 0) {
+        fprintf(stderr, "Error: index_save failed for '%s'\n", indexnm);
+        index_destroy_multi(ht);
+        return 1;
     }
 
     index_destroy_multi(ht);
     return 0;
 }
-
